@@ -19,7 +19,9 @@ async def on_ready():
 
 @bot.command(name='join')
 async def join(ctx):
-    if not is_connected(bot.voice_clients):
+    is_connected = discord.utils.get(bot.voice_clients)
+    
+    if not is_connected:
         channel = ctx.author.voice.channel
         await channel.connect()
 
@@ -41,11 +43,15 @@ async def play(ctx, link: str):
     voice_client = ctx.message.guild.voice_client
     voice_client.play(discord.FFmpegPCMAudio(executable= config_dict['ffmpeg_exec'], source= os.path.join(config_dict['file_path'], config_dict['audio_name'])))
 
-def is_connected(voice_clients):
-    voice_client = discord.utils.get(voice_clients)
+@bot.command(name='pause')
+async def pause(ctx):
+    voice_client = ctx.message.guild.voice_client
+    voice_client.pause()
 
-    if voice_client:
-        return True
+@bot.command(name='resume')
+async def resume(ctx):
+    voice_client = ctx.message.guild.voice_client
+    voice_client.resume()
 
 async def now_playing(text_channel, title):
     await text_channel.send("Now playing: " + title)
