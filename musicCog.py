@@ -28,7 +28,7 @@ class MusicCommands(commands.Cog):
         self.queue.append(link)
 
         if not ctx.voice_client.is_playing():
-            await play_next(self, ctx)
+            play_next(self, ctx)
         else:
             text_channel = self.bot.get_channel(ctx.channel.id)
             await text_channel.send("Song added to queue")
@@ -43,27 +43,26 @@ class MusicCommands(commands.Cog):
 
     @commands.command(name='skip')
     async def skip(self, ctx): 
-        await play_next(self, ctx)
+        ctx.voice_client.stop()
 
-async def play_next(self, ctx):
+def play_next(self, ctx):
     if (len(self.queue) > 0):
         yt = YouTube(self.queue[0])
         stream = yt.streams.get_by_itag(251)
         stream.download(self.config_dict['file_path'], self.config_dict['audio_name'], None, False)
 
         text_channel = self.bot.get_channel(ctx.channel.id)
-        await now_playing(text_channel, yt.title)
-
-        ctx.voice_client.stop()
-        ctx.voice_client.play(discord.FFmpegPCMAudio(executable= self.config_dict['ffmpeg_exec'], source= os.path.join(self.config_dict['file_path'], self.config_dict['audio_name']), after= lambda e: play_next(self, ctx)))
+        now_playing(text_channel, yt.title)
+        
+        ctx.voice_client.play(discord.FFmpegPCMAudio(executable= self.config_dict['ffmpeg_exec'], source= os.path.join(self.config_dict['file_path'], self.config_dict['audio_name'])), after=lambda e: play_next(self, ctx))
 
         self.queue.pop(0)
         
     else:
         ctx.voice_client.stop()
 
-async def now_playing(text_channel, title):
-    await text_channel.send("Now playing: " + title)
+def now_playing(text_channel, title):
+    text_channel.send("Now playing: " + title)
 
 async def setup(bot):
     await bot.add_cog(MusicCommands(bot))

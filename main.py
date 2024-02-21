@@ -7,6 +7,7 @@ from discord.ext import commands
 load_dotenv()
 TOKEN = os.getenv('DISCORD_TOKEN')
 
+discord.utils.setup_logging()
 discord_intents = discord.Intents.default()
 discord_intents.message_content = True
 
