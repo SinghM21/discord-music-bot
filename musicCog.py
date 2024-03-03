@@ -1,3 +1,4 @@
+import asyncio
 import os
 import discord
 from discord.ext import commands
@@ -52,7 +53,7 @@ def play_next(self, ctx):
         stream.download(self.config_dict['file_path'], self.config_dict['audio_name'], None, False)
 
         text_channel = self.bot.get_channel(ctx.channel.id)
-        now_playing(text_channel, yt.title)
+        self.bot.loop.create_task(text_channel.send("Now playing: " + yt.title))
         
         ctx.voice_client.play(discord.FFmpegPCMAudio(executable= self.config_dict['ffmpeg_exec'], source= os.path.join(self.config_dict['file_path'], self.config_dict['audio_name'])), after=lambda e: play_next(self, ctx))
 
@@ -60,9 +61,6 @@ def play_next(self, ctx):
         
     else:
         ctx.voice_client.stop()
-
-def now_playing(text_channel, title):
-    text_channel.send("Now playing: " + title)
 
 async def setup(bot):
     await bot.add_cog(MusicCommands(bot))
