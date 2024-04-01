@@ -1,5 +1,6 @@
 import asyncio
 import os
+import requests
 import discord
 from discord.ext import commands
 from pytube import YouTube
@@ -26,7 +27,12 @@ class MusicCommands(commands.Cog):
     @commands.command(name='play')
     async def play(self, ctx, link: str):
         await MusicCommands.join(self, ctx)
-        
+
+        if not check_if_youtube_url_is_valid(link):
+            text_channel = self.bot.get_channel(ctx.channel.id)
+            await text_channel.send("YouTube Url is not valid")
+            return
+
         self.queue.append(link)
 
         if not ctx.voice_client.is_playing():
@@ -36,7 +42,7 @@ class MusicCommands(commands.Cog):
             await text_channel.send("Song added to queue")
 
     @commands.command(name='search')
-    async def search(self, ctx, query: str):
+    async def search(self, ctx, *query: str):
         search = Search(query)    
         await add_reaction_buttons(self, ctx, search.results[:5])
         reaction_emoji = await get_reaction(self, ctx)
@@ -54,7 +60,7 @@ class MusicCommands(commands.Cog):
                 await MusicCommands.play(self, ctx, search.results[4].watch_url)
             case _:
                 text_channel = self.bot.get_channel(ctx.channel.id)
-                await text_channel.send("is cancel")
+                await text_channel.send("Voting for {0} is cancel".format(query))
 
     @commands.command(name='pause')
     async def pause(self, ctx):
@@ -68,19 +74,30 @@ class MusicCommands(commands.Cog):
     async def skip(self, ctx): 
         ctx.voice_client.stop()
 
+def check_if_youtube_url_is_valid(youtube_url):
+    youtube_url_formats = ['http://m.youtube.com/', 'http://youtube.com/', 'https://www.youtube.com/', 'https://youtu.be/']
+
+    if not any(url_formats in youtube_url for url_formats in youtube_url_formats):
+        return False
+
+    request = requests.get(youtube_url, allow_redirects=False)
+    return request.status_code == 200
+
 def play_next(self, ctx):
     if (len(self.queue) > 0):
         yt = YouTube(self.queue[0])
-        stream = yt.streams.get_by_itag(251)
-        stream.download(self.config_dict['file_path'], self.config_dict['audio_name'], None, False)
+        if not yt.age_restricted: 
+            stream = yt.streams.get_by_itag(251)
+            stream.download(self.config_dict['file_path'], self.config_dict['audio_name'], None, False)
 
-        text_channel = self.bot.get_channel(ctx.channel.id)
-        self.bot.loop.create_task(text_channel.send("Now playing: " + yt.title))
-        
-        ctx.voice_client.play(discord.FFmpegPCMAudio(executable= self.config_dict['ffmpeg_exec'], source= os.path.join(self.config_dict['file_path'], self.config_dict['audio_name'])), after=lambda e: play_next(self, ctx))
+            text_channel = self.bot.get_channel(ctx.channel.id)
+            self.bot.loop.create_task(text_channel.send("Now playing: " + yt.title))
 
+            ctx.voice_client.play(discord.FFmpegPCMAudio(executable= self.config_dict['ffmpeg_exec'], source= os.path.join(self.config_dict['file_path'], self.config_dict['audio_name'])), after=lambda e: play_next(self, ctx))
+        else:
+            text_channel = self.bot.get_channel(ctx.channel.id)
+            self.bot.loop.create_task(text_channel.send("This video is age restricted"))
         self.queue.pop(0)
-        
     else:
         ctx.voice_client.stop()
 
@@ -88,7 +105,7 @@ async def add_reaction_buttons(self, ctx, searchResults):
     text_channel = self.bot.get_channel(ctx.channel.id)
     voting_emojis = ["1️⃣", "2️⃣", "3️⃣", "4️⃣", "5️⃣"]
 
-    message = await text_channel.send('Vote to select song \n1. {0} \n2. {1} \n3. {2} \n4. {3} \n5. {4}'.format(searchResults[0].title, searchResults[1].title, searchResults[2].title, searchResults[3].title, searchResults[4].title) )
+    message = await text_channel.send('Vote to select song: \n1. {0} \n2. {1} \n3. {2} \n4. {3} \n5. {4}'.format(searchResults[0].title, searchResults[1].title, searchResults[2].title, searchResults[3].title, searchResults[4].title) )
     for emoji in range(len(voting_emojis)):
         await message.add_reaction(voting_emojis[emoji])
 
