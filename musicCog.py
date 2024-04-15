@@ -3,8 +3,7 @@ import os
 import requests
 import discord
 from discord.ext import commands
-from pytube import YouTube
-from pytube import Search
+from pytube import YouTube, Search, Playlist
 import configparser
 
 class MusicCommands(commands.Cog):
@@ -28,18 +27,25 @@ class MusicCommands(commands.Cog):
     async def play(self, ctx, link: str):
         await MusicCommands.join(self, ctx)
 
+        text_channel = self.bot.get_channel(ctx.channel.id)
+
         if not check_if_youtube_url_is_valid(link):
-            text_channel = self.bot.get_channel(ctx.channel.id)
             await text_channel.send("YouTube Url is not valid")
             return
+        
+        if check_if_youtube_url_is_a_playlist(link):
+            await text_channel.send("Loading playlist...")
+            youtube_playlist = Playlist(link)
 
-        self.queue.append(link)
+            for url in youtube_playlist.video_urls:        
+                self.queue.append(url)        
+                
+            await text_channel.send("Playlist added to queue")
+        else:
+           await text_channel.send("Song added to queue")
 
         if not ctx.voice_client.is_playing():
-            play_next(self, ctx)
-        else:
-            text_channel = self.bot.get_channel(ctx.channel.id)
-            await text_channel.send("Song added to queue")
+                play_next(self, ctx)
 
     @commands.command(name='search')
     async def search(self, ctx, *query: str):
@@ -82,6 +88,12 @@ def check_if_youtube_url_is_valid(youtube_url):
 
     request = requests.get(youtube_url, allow_redirects=False)
     return request.status_code == 200
+
+def check_if_youtube_url_is_a_playlist(youtube_url):
+    youtube_playlist_keywords = ['playlist', 'list']
+
+    if any (playlist_formats in youtube_url for playlist_formats in youtube_playlist_keywords):
+        return True
 
 def play_next(self, ctx):
     if (len(self.queue) > 0):
