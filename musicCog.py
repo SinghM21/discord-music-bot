@@ -1,4 +1,4 @@
-import asyncio
+import pytube.exceptions
 import os
 import requests
 import discord
@@ -42,10 +42,11 @@ class MusicCommands(commands.Cog):
                 
             await text_channel.send("Playlist added to queue")
         else:
+           self.queue.append(link)
            await text_channel.send("Song added to queue")
 
         if not ctx.voice_client.is_playing():
-                play_next(self, ctx)
+            play_next(self, ctx)
 
     @commands.command(name='search')
     async def search(self, ctx, *query: str):
@@ -81,12 +82,13 @@ class MusicCommands(commands.Cog):
         ctx.voice_client.stop()
 
 def check_if_youtube_url_is_valid(youtube_url):
-    youtube_url_formats = ['http://m.youtube.com/', 'http://youtube.com/', 'https://www.youtube.com/', 'https://youtu.be/']
+    youtube_url_formats = ['https://m.youtube.com/', 'https://youtube.com/', 'https://www.youtube.com/', 'https://youtu.be/']
 
+    print(youtube_url)
     if not any(url_formats in youtube_url for url_formats in youtube_url_formats):
         return False
 
-    request = requests.get(youtube_url, allow_redirects=False)
+    request = requests.get(youtube_url, allow_redirects=True)
     return request.status_code == 200
 
 def check_if_youtube_url_is_a_playlist(youtube_url):
@@ -98,18 +100,22 @@ def check_if_youtube_url_is_a_playlist(youtube_url):
 def play_next(self, ctx):
     if (len(self.queue) > 0):
         yt = YouTube(self.queue[0])
-        if not yt.age_restricted: 
-            stream = yt.streams.get_by_itag(251)
-            stream.download(self.config_dict['file_path'], self.config_dict['audio_name'], None, False)
+        try:
+            if not yt.age_restricted: 
+                stream = yt.streams.get_by_itag(251)
+                stream.download(self.config_dict['file_path'], self.config_dict['audio_name'], None, False)
 
-            text_channel = self.bot.get_channel(ctx.channel.id)
-            self.bot.loop.create_task(text_channel.send("Now playing: " + yt.title))
+                text_channel = self.bot.get_channel(ctx.channel.id)
+                self.bot.loop.create_task(text_channel.send("Now playing: " + yt.title))
 
-            ctx.voice_client.play(discord.FFmpegPCMAudio(executable= self.config_dict['ffmpeg_exec'], source= os.path.join(self.config_dict['file_path'], self.config_dict['audio_name'])), after=lambda e: play_next(self, ctx))
-        else:
+                ctx.voice_client.play(discord.FFmpegPCMAudio(executable= self.config_dict['ffmpeg_exec'], source= os.path.join(self.config_dict['file_path'], self.config_dict['audio_name'])), after=lambda e: play_next(self, ctx))
+            else:
+                text_channel = self.bot.get_channel(ctx.channel.id)
+                self.bot.loop.create_task(text_channel.send("{0} is age restricted".format(yt.title)))
+            self.queue.pop(0)
+        except pytube.exceptions.VideoUnavailable:
             text_channel = self.bot.get_channel(ctx.channel.id)
-            self.bot.loop.create_task(text_channel.send("This video is age restricted"))
-        self.queue.pop(0)
+            self.bot.loop.create_task(text_channel.send("{0} cannot be loaded".format(yt.watch_url)))
     else:
         ctx.voice_client.stop()
 
