@@ -4,6 +4,7 @@ import requests
 import discord
 from discord.ext import commands
 from pytube import YouTube, Search, Playlist
+from datetime import timedelta
 import configparser
 
 class MusicCommands(commands.Cog):
@@ -30,20 +31,24 @@ class MusicCommands(commands.Cog):
         text_channel = self.bot.get_channel(ctx.channel.id)
 
         if not check_if_youtube_url_is_valid(link):
-            await text_channel.send("YouTube Url is not valid")
+            embed_vars = discord.Embed(title= "ERROR", description= "YouTube Url is not valid")   
+            await text_channel.send(embed = embed_vars)
             return
         
         if check_if_youtube_url_is_a_playlist(link):
-            await text_channel.send("Loading playlist...")
+            embed_vars = discord.Embed(description= "Loading playlist")   
+            await text_channel.send(embed = embed_vars)
             youtube_playlist = Playlist(link)
 
             for url in youtube_playlist.video_urls:        
-                self.queue.append(url)        
-                
-            await text_channel.send("Playlist added to queue")
+                self.queue.append(YouTube(url))
+
+            embed_vars2 = discord.Embed(description= "Playlist added to queue")    
+            await text_channel.send(embed = embed_vars2)
         else:
-           self.queue.append(link)
-           await text_channel.send("Song added to queue")
+           self.queue.append(YouTube(link))
+           embed_vars = discord.Embed(description= "Song added to queue")
+           await text_channel.send(embed = embed_vars)
 
         if not ctx.voice_client.is_playing():
             play_next(self, ctx)
@@ -66,8 +71,9 @@ class MusicCommands(commands.Cog):
             case "5️⃣":
                 await MusicCommands.play(self, ctx, search.results[4].watch_url)
             case _:
+                embed_vars = discord.Embed(title= "Voting", description= "Voting for {0} is cancel".format(query))
                 text_channel = self.bot.get_channel(ctx.channel.id)
-                await text_channel.send("Voting for {0} is cancel".format(query))
+                await text_channel.send(embed = embed_vars)
 
     @commands.command(name='pause')
     async def pause(self, ctx):
@@ -81,41 +87,52 @@ class MusicCommands(commands.Cog):
     async def skip(self, ctx): 
         ctx.voice_client.stop()
 
+    @commands.command(name="queue")
+    async def queue(self, ctx):
+        queue_position = 1
+        videos_in_queue = ""
+        for song in self.queue:
+            videos_in_queue += "{0}{1}{2} {3}".format(queue_position, ". ", song.title, str(timedelta(seconds=song.length))) + "\n"
+            queue_position = queue_position + 1
+            
+        embed_vars = discord.Embed(title= "Songs in queue:", description= videos_in_queue)
+        text_channel = self.bot.get_channel(ctx.channel.id)   
+        await text_channel.send(embed = embed_vars)
+
 def check_if_youtube_url_is_valid(youtube_url):
     youtube_url_formats = ['https://m.youtube.com/', 'https://youtube.com/', 'https://www.youtube.com/', 'https://youtu.be/']
 
-    print(youtube_url)
-    if not any(url_formats in youtube_url for url_formats in youtube_url_formats):
-        return False
-
-    request = requests.get(youtube_url, allow_redirects=True)
-    return request.status_code == 200
+    return any(url_formats in youtube_url for url_formats in youtube_url_formats)
 
 def check_if_youtube_url_is_a_playlist(youtube_url):
     youtube_playlist_keywords = ['playlist', 'list']
 
-    if any (playlist_formats in youtube_url for playlist_formats in youtube_playlist_keywords):
-        return True
+    return any (playlist_formats in youtube_url for playlist_formats in youtube_playlist_keywords)
 
 def play_next(self, ctx):
     if (len(self.queue) > 0):
-        yt = YouTube(self.queue[0])
         try:
-            if not yt.age_restricted: 
-                stream = yt.streams.get_by_itag(251)
-                stream.download(self.config_dict['file_path'], self.config_dict['audio_name'], None, False)
+            video = self.queue[0]
+            if not video.age_restricted: 
+                stream = video.streams.get_by_itag(251)
+                stream.download(self.config_dict['youtube_download_directory'], self.config_dict['download_name'], None, False)
 
+                embed_vars = discord.Embed(title= "Now playing:", description= video.title)
                 text_channel = self.bot.get_channel(ctx.channel.id)
-                self.bot.loop.create_task(text_channel.send("Now playing: " + yt.title))
+                self.bot.loop.create_task(text_channel.send(embed = embed_vars))
 
-                ctx.voice_client.play(discord.FFmpegPCMAudio(executable= self.config_dict['ffmpeg_exec'], source= os.path.join(self.config_dict['file_path'], self.config_dict['audio_name'])), after=lambda e: play_next(self, ctx))
+                ctx.voice_client.play(discord.FFmpegPCMAudio(executable= self.config_dict['ffmpeg_exec'], source= os.path.join(self.config_dict['youtube_download_directory'], self.config_dict['download_name'])), after=lambda e: play_next(self, ctx))
             else:
                 text_channel = self.bot.get_channel(ctx.channel.id)
-                self.bot.loop.create_task(text_channel.send("{0} is age restricted".format(yt.title)))
+                embed_vars = discord.Embed(title= "ERROR", description= "{0} is age restricted".format(video.title)) 
+                self.bot.loop.create_task(text_channel.send(embed = embed_vars))
             self.queue.pop(0)
+            
         except pytube.exceptions.VideoUnavailable:
             text_channel = self.bot.get_channel(ctx.channel.id)
-            self.bot.loop.create_task(text_channel.send("{0} cannot be loaded".format(yt.watch_url)))
+            embed_vars = discord.Embed(title= "ERROR", description= "{0} cannot be loaded".format(self.queue[0])) 
+            self.bot.loop.create_task(embed = embed_vars)
+            self.queue.pop(0)
     else:
         ctx.voice_client.stop()
 
